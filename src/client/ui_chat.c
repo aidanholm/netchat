@@ -80,16 +80,19 @@ static void client_ui_chat_file_draw(client_t *client, client_ui_chat_t *ui, uns
 
 	const char *username = chat_row_name(client, *file);
 	const unsigned name_width = ui->chat->max_namelen;
+	transfer_t *transfer = sp_vector_get(&client->transfers, file->file.id);
 
-	switch(file->file.percent) {
+	unsigned percent = transfer->offset*100/transfer->fsize;
+
+	switch(percent) {
 		case -1: mvwprintw(ui->win, (*y)++, 2, "% *s | File [%s] (%u bytes) | Ready to download",
-			name_width, username, file->file.fname, file->file.fsize);
+			name_width, username, transfer->fname, transfer->fsize);
 			 break;
 		case 100: mvwprintw(ui->win, (*y)++, 2, "% *s | File [%s] (%u bytes) | Finished",
-			name_width, username, file->file.fname, file->file.fsize);
+			name_width, username, transfer->fname, transfer->fsize);
 			 break;
 		 default: mvwprintw(ui->win, (*y)++, 2, "% *s | File [%s] (%u bytes) | %u%%",
-			name_width, username, file->file.fname, file->file.fsize, file->file.percent);
+			name_width, username, transfer->fname, transfer->fsize, percent);
 			 break;
 	}
 

@@ -154,26 +154,15 @@ error:
 	return 1;
 }
 
-int chat_add_file(client_t *client, chat_t *chat, const char *fname, uint32_t fsize, uint16_t from_id, uint16_t id) {
+int chat_add_file(client_t *client, chat_t *chat, size_t index, uint16_t from_id) {
 	assert(client);
 	assert(chat);
-	assert(fname);
-	assert(fsize);
 
-	chat_row_t new;
+	chat_row_t new = {.type = CR_FILE, .from = from_id, .file.id = index};
+
+	/* Get the name from the name index */
 	const user_t *from = user_get(client, from_id);
-
-	/* TODO: validate */
-
-	new.type = CR_FILE;
-	new.from = from_id;
 	new.name_index = from ? from->name_index : from_id==client->id ? client->name_index : -1;
-
-	assert(strlen(fname)<sizeof(new.file.fname));
-	strcpy(new.file.fname, fname);
-	new.file.fsize = fsize;
-	new.file.id = id;
-	new.file.percent = -1;
 
 	check_quiet(vector_add(&chat->rows, &new, 1));
 

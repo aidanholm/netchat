@@ -12,10 +12,7 @@ typedef enum {
 } chat_row_type_t;
 
 typedef struct _chat_file_t {
-	char fname[256];
-	uint32_t fsize;
-	uint16_t id;
-	int percent;
+	size_t id; /* transfer_t id */
 } chat_file_t;
 
 typedef struct _chat_msg_t {
@@ -47,7 +44,7 @@ void chat_del(struct _client_t *client, chat_t *chat);
 chat_t *chat_get(struct _client_t *client, uint16_t id);
 
 int chat_add_msg(struct _client_t *client, chat_t *chat, const char *msg, uint16_t from);
-int chat_add_file(struct _client_t *client, chat_t *chat, const char *fname, uint32_t fsize, uint16_t from_id, uint16_t id);
+int chat_add_file(struct _client_t *client, chat_t *chat, size_t index, uint16_t from_id);
 
 int chat_send_msg(struct _client_t *client, chat_t *chat, const char *msg);
 int chat_send_file(struct _client_t *client, chat_t *chat, const char *msg);

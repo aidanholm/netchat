@@ -13,6 +13,7 @@
 #include "user.h"
 #include "msg.h"
 #include "msg_handlers.h"
+#include "transfer.h"
 #include "file.h"
 #include "macros.h"
 
@@ -32,15 +33,15 @@ int client_init(client_t *client, const char *host, unsigned int port) {
 	vector_init(&client->users, sizeof(user_t));
 	vector_init(&client->chats, sizeof(chat_t));
 	vector_init(&client->names, 256*sizeof(char));
+	sp_vector_init(&client->transfers, sizeof(transfer_t));
 	check(!pthread_mutex_init(&client->users_mutex, NULL),
 			"Couldn't create mutex");
 
 	check(!client_connect(client, host, port),
 			"Couldn't connect to %s:%d", host, port);
 
+	client->transferring = 0;
 	client->name_index = -1;
-	client->file_fd = -1;
-	client->fchat_file_i = -1;
 	client->status = US_ONLINE;
 
 	return 0;
@@ -129,60 +130,30 @@ int client_upload_file(client_t *client, chat_t *chat, const char *fname) {
 	assert(chat);
 	assert(fname);
 	assert(strlen(fname));
+	
+	transfer_t transfer;
+	const char *err;
+	size_t index;
 
-	struct stat f_stat;
-
-	if(client->file_fd >= 0) {
-		if(client->sending)
-			chat_add_msg(client, chat, "Cannot upload: already uploading another file.", 0);
-		else
-			chat_add_msg(client, chat, "Cannot upload: already downloading another file.", 0);
+	if(client->transferring) {
+		chat_add_msg(client, chat, "Already transferring file!", 0);
 		return 1;
 	}
 
-	/*assert(client->fchat_file_i == (size_t)-1);*/
-
-	if((client->file_fd = open(fname, O_RDONLY)) < 0) {
-		switch(errno) {
-			case ENOENT:
-				chat_add_msg(client, chat, "Cannot upload: no such file.", 0);
-				break;
-			case EACCES:
-				chat_add_msg(client, chat, "Cannot upload: permission denied.", 0);
-				break;
-			case EINTR:
-				chat_add_msg(client, chat, "Cannot upload: interrupted.", 0);
-				break;
-			case ELOOP:
-				chat_add_msg(client, chat, "Cannot upload: too many symbolic links.", 0);
-				break;
-			default:
-				chat_add_msg(client, chat, "Cannot upload: miscellaneous error.", 0);
-				break;
-		}
+	if((err = transfer_begin_upload(&transfer, chat, fname))) {
+		chat_add_msg(client, chat, err, 0);
 		return 1;
 	}
 
-	fstat(client->file_fd, &f_stat);
-
-	if(f_stat.st_size > UINT32_MAX) {
-		chat_add_msg(client, chat, "Cannot upload: file too large.", 0);
-		close(client->file_fd);
-		return 1;
-	}
-
-	client->fsize = f_stat.st_size;
-	client->offset = 0;
-	client->sending = 1;
-
-	msg_send(client->socket, MSG_send_file, chat->id, client->fsize,
+	client->transferring = 1;
+	msg_send(client->socket, MSG_send_file, chat->id, transfer.fsize,
 			(uint16_t)strlen(fname), fname, (uint16_t)0, (uint16_t)0);
 
+	check_quiet(index = sp_vector_add(&client->transfers, &transfer));
+
 	/* r used because fchat_file_i is unsigned, and error code is -1 */
-	int r = chat_add_file(client, chat, fname, client->fsize, client->id, 0);
-	check(r != -1, "Couldn't add file entry to chat.");
-	client->fchat = chat;
-	client->fchat_file_i = r;
+	check(chat_add_file(client, chat, index, 0) != -1,
+			"Couldn't add file entry to chat.");
 
 	return 0;
 error:
@@ -196,46 +167,51 @@ int client_download_file(client_t *client, chat_file_t *file, const char *name) 
 	assert(strlen(name));
 
 	chat_t *chat = client->ui.chat.chat;
+	transfer_t *transfer = sp_vector_get(&client->transfers, file->id);
+	const char *err;
 
-	if((client->file_fd = file_create(name, file->fsize)) == -1) {
-		switch (errno) {
-			case EEXIST:
-				chat_add_msg(client, chat, "File already exists.", 0);
-				return 1;
-				break;
-		}
+	if(client->transferring) {
+		chat_add_msg(client, chat, "Already transferring file!", 0);
+		return 1;
 	}
 
-	client->sending = 0;
-	client->offset = 0;
-	client->fsize = file->fsize;
-	msg_send(client->socket, MSG_recv_file, chat->id, file->id); 
+	if((err = transfer_begin_download(transfer, name))) {
+		chat_add_msg(client, chat, err, 0);
+		return 1;
+	}
 
+	client->transferring = 1;
+	client->download_file_id = file->id;
+	msg_send(client->socket, MSG_recv_file, chat->id, transfer->file_id); 
 	return 0;
 }
 
 int client_send_file_part(client_t *client) {
 	assert(client);
 
-	if(client->file_fd == -1 || !client->sending)
-		return 0;
+	transfer_t *transfer;
+	sp_vector_foreach(&client->transfers, transfer) {
+		if(!transfer->sending)
+			continue;
 
-	uint16_t len = min(FILE_BLOCK_SZ, client->fsize - client->offset);
-	char *buf = file_map(client->file_fd, PROT_READ, client->offset, len);
-	check_quiet(!msg_send(client->socket, MSG_file_part, len, buf));
-	file_unmap(buf, len);
+		/* SLIGHTLY HACKY:
+		 * Don't remove uploads when they're done, because the chat UI still needs
+		 * the transfer record to print completion/filename/etc
+		 */
+		if(transfer->offset == transfer->fsize)
+			continue;
 
-	client->offset += len;
-	assert(client->offset <= client->fsize);
+		/* Send a chunk of the file */
+		uint16_t len = min(FILE_BLOCK_SZ, transfer->fsize - transfer->offset);
+		char *buf = file_map(transfer->fd, PROT_READ, transfer->offset, len);
+		check_quiet(!msg_send(client->socket, MSG_file_part, len, buf));
+		file_unmap(buf, len);
 
-	/* Update the file progress bar in the UI */
-	chat_row_t *row = vector_get(&client->fchat->rows, client->fchat_file_i);
-	assert(row->type == CR_FILE);
-	row->file.percent = 100*client->offset/client->fsize;
+		transfer->offset += len;
+		assert(transfer->offset <= transfer->fsize);
 
-	if(client->offset == client->fsize) {
-		client->sending = 0;
-		client->file_fd = -1;
+		if(transfer->offset == transfer->fsize)
+			client->transferring = 0;
 	}
 
 	return 0;
@@ -288,6 +264,19 @@ chat_t *client_current_chat(client_t *client) {
 	return client->ui.chat.chat;
 }
 
+transfer_t *client_get_transfer(client_t *client, uint16_t id) {
+	assert(client);
+	assert(id);
+
+	transfer_t *transfer;
+	sp_vector_foreach(&client->transfers, transfer) {
+		if(transfer->file_id == id)
+			return transfer;
+	}
+
+	return NULL;
+}
+
 int client_send_name(client_t *client, const char *name) {
 	assert(client);
 	assert(0<strlen(name) && strlen(name)<256);
@@ -310,8 +299,8 @@ static void *client_net_thread(void *c) {
 			break;
 		} else if(r > 0){
 			pthread_mutex_lock(&client->users_mutex);
-			check(!msg_handle(msg_get_type(type), client),
-					"Message handling error.");
+			check_warn(!msg_handle(msg_get_type(type), client),
+					"Message handling error (type %u)", type);
 		pthread_mutex_unlock(&client->users_mutex);
 		} else {
 			switch(errno) {

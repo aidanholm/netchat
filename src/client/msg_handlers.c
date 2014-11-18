@@ -5,6 +5,7 @@
 #include "client.h"
 #include "debug.h"
 #include "user.h"
+#include "transfer.h"
 #include "file.h"
 
 char *buf = NULL;
@@ -48,20 +49,22 @@ error:
 int msg_handle_send_file(struct _client_t *client) {
 	assert(client);
 
-	uint16_t chat_id, len, file_id, sender_id;
-	uint32_t fsize;
+	transfer_t transfer = {.sending = 0, .fd = -1, .offset = 0};
+	uint16_t len;
 	chat_t *chat;
+	size_t index;
 
-	check_quiet(!msg_recv(client->socket, MSG_send_file, &chat_id, &fsize, &len, &buf, &file_id, &sender_id));
+	check_quiet(!msg_recv(client->socket, MSG_send_file,
+				&transfer.chat_id, &transfer.fsize, &len, &buf, &transfer.file_id, &transfer.sender_id));
 	buf[len] = 0;
-	check_quiet(chat = chat_get(client, chat_id));
-	check_quiet(file_id);
+	check_quiet(chat = chat_get(client, transfer.chat_id));
+	check_quiet(transfer.file_id);
+	transfer.fname = strdup(buf);
 
-	/* r used because fchat_file_i is unsigned, and error code is -1 */
-	int r = chat_add_file(client, chat, buf, fsize, sender_id, file_id);
-	check(r != -1, "Couldn't add file entry to chat.");
-	client->fchat = chat;
-	client->fchat_file_i = r;
+	check_quiet(index = sp_vector_add(&client->transfers, &transfer));
+
+	check(chat_add_file(client, chat, index, transfer.sender_id) != -1,
+			"Couldn't add file entry to chat.");
 
 	return 0;
 error:
@@ -72,24 +75,22 @@ int msg_handle_file_part(client_t *client) {
 	assert(client);
 
 	uint16_t len;
+	uint16_t file_id = client->download_file_id; /* FIXME */
+	transfer_t *transfer;
 
 	check_quiet(!msg_recv(client->socket, MSG_file_part, &len, &buf));
+	check_quiet(transfer = client_get_transfer(client, file_id));
 
-	void *file = file_map(client->file_fd, PROT_WRITE, client->offset, len);
+	void *file = file_map(transfer->fd, PROT_WRITE, transfer->offset, len);
 	memcpy(file, buf, len);
-	client->offset += len;
-
-	/* Update the file progress bar in the UI */
-	chat_row_t *row = vector_get(&client->fchat->rows, client->fchat_file_i);
-	assert(row->type == CR_FILE);
-	row->file.percent = 100*client->offset/client->fsize;
-
 	file_unmap(file, len);
 
-	assert(client->offset <= client->fsize);
-	if(client->offset == client->fsize) {
-		close(client->file_fd);
-		client->fchat_file_i = -1;
+	transfer->offset += len;
+	assert(transfer->offset <= transfer->fsize);
+
+	if(transfer->offset == transfer->fsize) {
+		close(transfer->fd);
+		client->transferring = 0;
 	}
 
 	return 0;
