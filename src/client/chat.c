@@ -166,6 +166,8 @@ int chat_add_file(client_t *client, chat_t *chat, size_t index, uint16_t from_id
 
 	check_quiet(vector_add(&chat->rows, &new, 1));
 
+	chat->max_namelen = max(chat->max_namelen, utf8_scrlen(chat_row_name(client, new)));
+
 	return chat->rows.size-1;
 error:
 	return -1;

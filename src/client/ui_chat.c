@@ -8,12 +8,6 @@
 #include "debug.h"
 #include "macros.h"
 
-static inline void ncurses_win_rect(WINDOW *win, int x0, int y0, int w, int h, char ch) {
-	for(int y=y0; y<y0+h; y++)
-		for(int x=x0; x<x0+w; x++)
-			mvwaddch(win, y, x, ch);
-}
-
 int client_ui_chat_init(client_ui_chat_t *ui) {
 	assert(ui);
 
@@ -160,7 +154,6 @@ void client_ui_chat_draw(client_t *client, client_ui_chat_t *ui) {
 
 	wattroff(ui->win, COLOR_PAIR(COL_CURSOR));
 
-	mvwprintw(win, 0, ui->w-3, "%u", strlen(client->ui.input.value));
 	client_ui_input_draw(win, &ui->input, client->ui.focus == FOCUS_CHAT );
 
 	wrefresh(win);
