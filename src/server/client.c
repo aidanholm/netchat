@@ -214,7 +214,7 @@ void client_send_file_part(client_t *client) {
 		return;
 	assert(client->file_fd != -1);
 
-	uint16_t len = min(4096, client->fsize - client->offset);
+	uint16_t len = min(FILE_BLOCK_SZ, client->fsize - client->offset);
 	char *buf = file_map(client->file_fd, PROT_READ, client->offset, len);
 	msg_send(client->fd, MSG_file_part, len, buf);
 	file_unmap(buf, len);

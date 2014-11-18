@@ -87,11 +87,11 @@ int _msg_send(int fd, const char *fmt, ...) {
 			fmt += strlen("%u");
 			prev_arg = arg;
 		}
-		else if(!strncmp(fmt, "%s", strlen("%s")))
+		else if(!strncmp(fmt, "%p", strlen("%p")))
 		{
 			const char *arg = va_arg(ap, const char *);
 			check_quiet(!write_block(fd, arg, prev_arg));
-			fmt += strlen("%s");
+			fmt += strlen("%p");
 		}
 		else if(!strncmp(fmt, "%k", strlen("%k")))
 		{
@@ -150,20 +150,22 @@ int _msg_recv(int fd, const char *fmt, ...) {
 			fmt += strlen("%u");
 			prev_arg = *arg;
 		}
-		else if(!strncmp(fmt, "%s", strlen("%s")))
+		else if(!strncmp(fmt, "%p", strlen("%p")))
 		{
-			char *arg = va_arg(ap, char *);
-			check_quiet(!read_block(fd, arg, prev_arg));
-			fmt += strlen("%s");
+			char **arg = va_arg(ap, char **);
+			*arg = realloc(*arg, prev_arg);
+			check_quiet(!read_block(fd, *arg, prev_arg));
+			fmt += strlen("%p");
 		}
 		else if(!strncmp(fmt, "%k", strlen("%k")))
 		{
-			uint16_t *arg = va_arg(ap, uint16_t *);
-			check_quiet(!read_block(fd, arg, prev_arg*2));
+			uint16_t **arg = va_arg(ap, uint16_t **);
+			*arg = realloc(*arg, prev_arg*2);
+			check_quiet(!read_block(fd, *arg, prev_arg*2));
 			for(unsigned int i=0; i<prev_arg; i++) {
-				uint16_t old = arg[i];
-				arg[i] = ntohs(arg[i]);
-				debug("recv: %hu --> %hu", old, arg[i]);
+				uint16_t old = (*arg)[i];
+				(*arg)[i] = ntohs((*arg)[i]);
+				debug("recv: %hu --> %hu", old, (*arg)[i]);
 			}
 			fmt += strlen("%k");
 		}

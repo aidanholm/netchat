@@ -7,14 +7,14 @@
 #include "user.h"
 #include "file.h"
 
-char buf[4096];
+char *buf = NULL;
 
 int msg_handle_start_chat(client_t *client) {
 	assert(client);
 
 	uint16_t chat_id, num_ids, *client_ids;
 
-	check_quiet(!msg_recv(client->socket, MSG_start_chat, &chat_id, &num_ids, buf));
+	check_quiet(!msg_recv(client->socket, MSG_start_chat, &chat_id, &num_ids, &buf));
 	client_ids = (uint16_t*)buf;
 
 	check(num_ids > 0, "Can't start a chat with no participants.");
@@ -52,7 +52,7 @@ int msg_handle_send_file(struct _client_t *client) {
 	uint32_t fsize;
 	chat_t *chat;
 
-	check_quiet(!msg_recv(client->socket, MSG_send_file, &chat_id, &fsize, &len, buf, &file_id, &sender_id));
+	check_quiet(!msg_recv(client->socket, MSG_send_file, &chat_id, &fsize, &len, &buf, &file_id, &sender_id));
 	buf[len] = 0;
 	check_quiet(chat = chat_get(client, chat_id));
 	check_quiet(file_id);
@@ -73,7 +73,7 @@ int msg_handle_file_part(client_t *client) {
 
 	uint16_t len;
 
-	check_quiet(!msg_recv(client->socket, MSG_file_part, &len, buf));
+	check_quiet(!msg_recv(client->socket, MSG_file_part, &len, &buf));
 
 	void *file = file_map(client->file_fd, PROT_WRITE, client->offset, len);
 	memcpy(file, buf, len);
@@ -102,7 +102,7 @@ int msg_handle_user_update(client_t *client) {
 	
 	uint16_t user_id;
 	uint8_t status, len;
-	msg_recv(client->socket, MSG_user_update, &user_id, &status, &len, buf);
+	msg_recv(client->socket, MSG_user_update, &user_id, &status, &len, &buf);
 	buf[len] = '\0';
 
 	user_t *user = user_get(client, user_id);
@@ -137,7 +137,7 @@ int msg_handle_msg(client_t *client) {
 	uint16_t chat_id, sender_id, len;
 	chat_t *chat;
 
-	msg_recv(client->socket, MSG_msg, &chat_id, &sender_id, &len, buf);
+	msg_recv(client->socket, MSG_msg, &chat_id, &sender_id, &len, &buf);
 	buf[len] = 0;
 
 	check(chat = chat_get(client, chat_id),

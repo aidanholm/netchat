@@ -220,7 +220,7 @@ int client_send_file_part(client_t *client) {
 	if(client->file_fd == -1 || !client->sending)
 		return 0;
 
-	uint16_t len = min(4096, client->fsize - client->offset);
+	uint16_t len = min(FILE_BLOCK_SZ, client->fsize - client->offset);
 	char *buf = file_map(client->file_fd, PROT_READ, client->offset, len);
 	check_quiet(!msg_send(client->socket, MSG_file_part, len, buf));
 	file_unmap(buf, len);

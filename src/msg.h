@@ -4,14 +4,18 @@
 #include <assert.h>
 #include <stdint.h>
 
+/* Has to be less than sizeof(uint16_t)
+ * Chosen to be a multiple of the page size to simplify mmap-ing */
+#define FILE_BLOCK_SZ (1<<15)
+
 #define MSG_TYPES \
 	X(start_chat , "%hu%hu%k"        , chat id; num ids; htons(ids)) \
 	X(leave_chat , "%hu%hu"          , chat id; user id) \
-	X(msg        , "%hu%hu%hu%s"     , chat id; sender id; length; msg[length]) \
-	X(send_file  , "%hu%u%hu%s%hu%hu", chat id; fsize; l; fname[l]; file id; sender) \
-	X(file_part  , "%hu%s"           , length; blob[length]) \
+	X(msg        , "%hu%hu%hu%p"     , chat id; sender id; length; msg[length]) \
+	X(send_file  , "%hu%u%hu%p%hu%hu", chat id; fsize; l; fname[l]; file id; sender) \
+	X(file_part  , "%hu%p"           , length; blob[length]) \
 	X(recv_file  , "%hu%u"           , chat id; file id) \
-	X(user_update, "%hu%hhu%hhu%s"   , userid; status; length; name[length]) \
+	X(user_update, "%hu%hhu%hhu%p"   , userid; status; length; name[length]) \
 
 /*
  * Automatically generated stuff below

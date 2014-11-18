@@ -5,7 +5,7 @@
 #include "debug.h"
 #include "utilities/file.h"
 
-char buf[4096];
+char *buf = NULL;
 
 int msg_handle_start_chat(server_t *server, client_t *client) {
 	assert(server);
@@ -14,7 +14,7 @@ int msg_handle_start_chat(server_t *server, client_t *client) {
 	uint16_t num_ids, *client_ids, unused;
 	client_t **clients;
 
-	check_quiet(!msg_recv(client->fd, MSG_start_chat, &unused, &num_ids, buf));
+	check_quiet(!msg_recv(client->fd, MSG_start_chat, &unused, &num_ids, &buf));
 
 	client_ids = (uint16_t *)&buf[0];
 	clients = alloca(sizeof(*clients)*num_ids);
@@ -64,7 +64,7 @@ int msg_handle_msg(server_t *server, client_t *client) {
 	uint16_t chat_id, len, unused;
 	chatroom_t *chatroom;
 
-	check_quiet(!msg_recv(client->fd, MSG_msg, &chat_id, &unused, &len, buf));
+	check_quiet(!msg_recv(client->fd, MSG_msg, &chat_id, &unused, &len, &buf));
 	check_quiet(chatroom = sp_vector_get(&server->chatrooms, chat_id));
 	check_quiet(chatroom_client_is_present(server, chatroom, client));
 	assert(len < sizeof(buf)); /* FIXME */
@@ -83,7 +83,7 @@ int msg_handle_send_file(server_t *server, client_t *client) {
 	uint16_t chat_id, len, unused;
 	uint32_t fsize;
 	check_quiet(!msg_recv(client->fd,
-				MSG_send_file, &chat_id, &fsize, &len, buf, &unused, &unused));
+				MSG_send_file, &chat_id, &fsize, &len, &buf, &unused, &unused));
 	assert(len < sizeof(buf)); /* FIXME */
 	buf[len] = 0;
 
@@ -122,7 +122,7 @@ int msg_handle_file_part(server_t *server, client_t *client) {
 
 	uint16_t len;
 
-	check_quiet(!msg_recv(client->fd, MSG_file_part, &len, buf));
+	check_quiet(!msg_recv(client->fd, MSG_file_part, &len, &buf));
 	check_quiet(!client_recv_file_part(server, client, buf, len));
 
 	return 0;
@@ -138,7 +138,7 @@ int msg_handle_user_update(struct _server_t *server, struct _client_t *client) {
 	uint8_t status, len;
 	client_t *other;
 
-	check_quiet(!msg_recv(client->fd, MSG_user_update, &unused, &status, &len, buf));
+	check_quiet(!msg_recv(client->fd, MSG_user_update, &unused, &status, &len, &buf));
 	buf[len] = 0;
 
 	/* Check other clients' names */
