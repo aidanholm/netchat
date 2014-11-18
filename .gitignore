@@ -1,0 +1,8 @@
+tags
+deps
+obj
+client
+server
+.ycm_extra_conf_tmpl.m4
+.ycm_extra_conf.py
+.ycm_extra_conf.pyc
