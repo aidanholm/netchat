@@ -6,12 +6,12 @@
 #include <assert.h>
 #include <string.h>
 #include <stdint.h>
+#include "vector.h"
 #include "debug.h"
 
 typedef struct _client_ui_input_t {
-	char value[1024];
+	vector_t chars;
 	const char *prompt;
-	uint16_t len;
 } client_ui_input_t;
 
 void client_ui_input_init(client_ui_input_t *ui);

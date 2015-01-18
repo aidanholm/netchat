@@ -2,26 +2,17 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
-#define __USE_XOPEN
-#include <wchar.h>
 
 #include "client.h"
 #include "chat.h"
 #include "msg.h"
 #include "debug.h"
 #include "user.h"
+#include "utf8.h"
 
 static int chat_id_cmp(const void *A, const void *B) {
 	const chat_t *a = A, *b = B;
 	return sort_by(a->id, b->id);
-}
-
-static int utf8_scrlen(const char *msg) {
-	wchar_t wcstr[512];
-	mbstowcs(wcstr, msg, sizeof(wcstr)/sizeof(*wcstr));
-	int len = wcswidth(wcstr, sizeof(wcstr)/sizeof(*wcstr));
-	debug("Screen width of '%s' is %d", msg, len);
-	return len;
 }
 
 int chat_add(client_t *client, uint16_t chat_id, uint16_t *client_ids, uint16_t num_ids) {

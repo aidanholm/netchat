@@ -145,7 +145,7 @@ void client_ui_sidebar_input(client_ui_sidebar_t *ui, int input) {
 	pthread_mutex_lock(&ui->client->users_mutex);
 
 	int over_user = (ui->current < ui->client->users.size),
-		over_chat = !!ui->client->ui.chat.chat;
+		over_chat = !!client_current_chat(ui->client);
 	user_t *user;
 	uint16_t user_ids[ui->client->users.size], uid_i = 0; /* Ugly */
 
@@ -184,16 +184,15 @@ void client_ui_sidebar_input(client_ui_sidebar_t *ui, int input) {
 		 */
 		case 'l':
 			if(over_chat) {
-				size_t i = vector_indexof(&ui->client->chats, ui->client->ui.chat.chat);
-				chat_del(ui->client, ui->client->ui.chat.chat);
+				size_t i = ui->client->ui.chat.chat_index;
+				chat_del(ui->client, client_current_chat(ui->client));
 				/* Now select a different chat to display */
 				if(i == ui->client->chats.size) i--;
-				chat_t *next_chat = i < ui->client->chats.size ?
-					vector_get(&ui->client->chats, i) : NULL;
-				client_ui_chat_show(&ui->client->ui.chat, next_chat);
-				if(ui->client->chats.size == 0) {
+				ui->client->ui.chat.chat_index = i < ui->client->chats.size ? i : (unsigned)-1;
+				if(ui->client->chats.size == 0)
 					ui->current = ui->client->users.size-1;
-				}
+				debug("New chat_index = %u", ui->client->ui.chat.chat_index);
+				ui->current = ui->client->users.size + ui->client->ui.chat.chat_index;
 			}
 			break;
 		/*
@@ -248,7 +247,8 @@ void client_ui_sidebar_scroll(client_ui_sidebar_t *ui, int scroll) {
 			assert(chat);
 		}
 	}
-	client_ui_chat_show(&ui->client->ui.chat, chat);
+
+	ui->client->ui.chat.chat_index = chat ? vector_indexof(&ui->client->chats, chat) : (unsigned)-1;
 
 	pthread_mutex_unlock(&ui->client->users_mutex);
 }

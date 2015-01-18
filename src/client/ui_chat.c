@@ -7,12 +7,13 @@
 #include "user.h"
 #include "debug.h"
 #include "macros.h"
+#include "utf8.h"
 
 int client_ui_chat_init(client_ui_chat_t *ui) {
 	assert(ui);
 
 	ui->win = newwin(0, 0, 0, 0);
-	ui->chat = NULL;
+	ui->chat_index = (unsigned) -1;
 	client_ui_input_init(&ui->input);
 	ui->input.prompt = "> ";
 
@@ -30,28 +31,26 @@ static void client_ui_chat_msg_draw(client_t *client, client_ui_chat_t *ui, unsi
 	assert(ui->win);
 	assert(*y < ylim);
 
-	const unsigned name_width = ui->chat->max_namelen;
+	const chat_t *chat = client_current_chat(client);
+	const unsigned name_width = chat->max_namelen;
 	const char *username = chat_row_name(client, *msg);
-	char *m = vector_get(&ui->chat->chars, msg->msg.start);
+	char *m = vector_get(&chat->chars, msg->msg.start);
 	unsigned int ystart = *y;
 	int indent;
 
-	mvwprintw(ui->win, *y, 2, "% *s ", name_width, username);
+	mvwprintw(ui->win, *y, 0, "  % *s%s ", name_width-utf8_scrlen(username), "", username);
 	mvwchgat(ui->win, *y, 2, name_width, 0, COL_NAME, NULL);
 	indent = name_width + 1;
 
 	/* Very basic wrapping: just breaks anywhere! At least it's
 	 * multilingual and indents properly... */
 	while(*m) {
+		/* Find where to break */
 		char *line_end = m;
 		int displen = 0;
 		do {
 			wchar_t wchar;
-			/* Advance line_end (utf8) */
-			if((*line_end & 0x80) == 0x00) line_end += 1;
-			else if((*line_end & 0xe0) == 0xc0) line_end += 2;
-			else if((*line_end & 0xf0) == 0xe0) line_end += 3;
-			else if((*line_end & 0xf8) == 0xf0) line_end += 4;
+			line_end += utf8_char_bytewidth(line_end);
 			/* Find display width of char */
 			mbstowcs(&wchar, line_end, 1);
 			displen += wcwidth(wchar);
@@ -72,8 +71,9 @@ static void client_ui_chat_file_draw(client_t *client, client_ui_chat_t *ui, uns
 	assert(ui->win);
 	assert(*y < ylim);
 
+	const chat_t *chat = client_current_chat(client);
 	const char *username = chat_row_name(client, *file);
-	const unsigned name_width = ui->chat->max_namelen;
+	const unsigned name_width = chat->max_namelen;
 	transfer_t *transfer = sp_vector_get(&client->transfers, file->file.id);
 
 	unsigned percent = transfer->offset*100/transfer->fsize;
@@ -98,10 +98,11 @@ void client_ui_chat_draw(client_t *client, client_ui_chat_t *ui) {
 	assert(ui);
 	assert(ui->win);
 
+	chat_t *chat = client_current_chat(client);
 	WINDOW *win = ui->win;
 	werase(win);
 
-	if(!ui->chat) {
+	if(!chat) {
 		const char *msg = "Select a user on the left to start chatting!";
 		mvwprintw(win, ui->h/2, (ui->w-strlen(msg))/2, msg);
 		wrefresh(win);
@@ -111,9 +112,9 @@ void client_ui_chat_draw(client_t *client, client_ui_chat_t *ui) {
 	/* Draw chat messages */
 
 	unsigned int y = 0;
-	ui->chat->morebelow = 0;
-	for(unsigned int i=ui->chat->top; i<ui->chat->rows.size ; i++) {
-		chat_row_t *row = vector_get(&ui->chat->rows, i);
+	chat->morebelow = 0;
+	for(unsigned int i=chat->top; i<chat->rows.size ; i++) {
+		chat_row_t *row = vector_get(&chat->rows, i);
 
 		switch(row->type) {
 			case CR_MSG:
@@ -127,29 +128,30 @@ void client_ui_chat_draw(client_t *client, client_ui_chat_t *ui) {
 				break;
 		}
 
-		if(y>=(unsigned)ui->h-1) {
-			/*if(i<ui->chat->rows.size-1)*/
-			ui->chat->morebelow = 1;
+		/* Always draw the next message out of view;
+		 * needed so we know how many lines it is, so we can scroll down */
+		if(chat->morebelow)
 			break;
-		}
+		if(y>=(unsigned)ui->h-1)
+			chat->morebelow = 1;
 	}
 
 	wattron(ui->win, COLOR_PAIR(COL_CURSOR));
 
 	/* Draw chat cursor */
-	if(ui->chat->rows.size>0) {
+	if(chat->rows.size>0) {
 		int y = 0;
-		for(int m=ui->chat->top; m<ui->chat->cursor; m++) {
-			chat_row_t *row = vector_get(&ui->chat->rows, m);
+		for(int m=chat->top; m<chat->cursor; m++) {
+			chat_row_t *row = vector_get(&chat->rows, m);
 			y += row->type == CR_FILE ? 1 : row->msg.num_lines;
 		}
 		mvwprintw(win, y, 0, "▶");
 	}
 
 	/* Draw more above/below indicators */
-	if(ui->chat->rows.size>0 && ui->chat->top>0)
+	if(chat->rows.size>0 && chat->top>0)
 		mvwprintw(win, 0, ui->w-1, "▲");
-	if(ui->chat->morebelow)
+	if(chat->morebelow)
 		mvwprintw(win, ui->h-2, ui->w-1, "▼");
 
 	wattroff(ui->win, COLOR_PAIR(COL_CURSOR));
@@ -163,7 +165,9 @@ void client_ui_chat_input(client_t *client, client_ui_chat_t *ui, int input) {
 	assert(ui);
 	assert(input);
 
-	if(!ui->chat)
+	chat_t *chat = client_current_chat(client);
+
+	if(!chat)
 		return;
 
 	pthread_mutex_lock(&client->users_mutex);
@@ -172,11 +176,9 @@ void client_ui_chat_input(client_t *client, client_ui_chat_t *ui, int input) {
 		case KEY_ENTER:
 		case '\r':
 		case '\n':
-			if(ui->input.len == 0) break;
-			assert(strlen(ui->input.value));
-			chat_send_msg(client, ui->chat, ui->input.value);
-			ui->input.value[0] = 0;
-			ui->input.len = 0;
+			if(ui->input.chars.data-1 == 0) break;
+			chat_send_msg(client, chat, ui->input.chars.data);
+			ui_input_clr(&ui->input);
 			break;
 		default:
 			client_ui_input_input(&ui->input, input);
@@ -186,24 +188,17 @@ void client_ui_chat_input(client_t *client, client_ui_chat_t *ui, int input) {
 	pthread_mutex_unlock(&client->users_mutex);
 }
 
-void client_ui_chat_show(client_ui_chat_t* ui, chat_t *chat) {
-	ui->chat = chat;
-}
-
-void client_ui_chat_scroll(client_ui_chat_t *ui, int scroll) {
+void client_ui_chat_scroll(const client_t *client, client_ui_chat_t *ui, int scroll) {
 	assert(ui);
 	assert(scroll != 0);
 
-	if(!ui->chat)
+	chat_t *chat = client_current_chat(client);
+
+	if(!chat)
 		return;
 
-	if(scroll < 0) {
-		if(ui->chat->cursor == ui->chat->top)
-			ui->chat->top = max(0, ui->chat->top+scroll);
-		ui->chat->cursor = max(0, ui->chat->cursor+scroll);
-	} else {
-		if(ui->chat->morebelow)
-			ui->chat->top = min(ui->chat->rows.size-1, (unsigned)ui->chat->top+scroll);
-		ui->chat->cursor = min(ui->chat->rows.size-1, (unsigned)ui->chat->cursor+scroll);
-	}
+	if(scroll < 0)
+		chat->cursor = max(0, chat->cursor+scroll);
+	else
+		chat->cursor = min(chat->rows.size-1, (unsigned)chat->cursor+scroll);
 }

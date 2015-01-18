@@ -73,13 +73,14 @@ void client_ui_run(client_ui_t *ui, client_t *client) {
 		client_ui_draw(ui, client);
 		pthread_mutex_unlock(&client->users_mutex);
 
+		chat_t *current_chat = client_current_chat(client);
 		int input = getch();
 
 		if(input == ERR)
 			continue;
 
 		/* Switch focus keybindings (also resets mult_move) */
-		if(ui->focus == FOCUS_SIDEBAR && input == 'i' && ui->chat.chat) {
+		if(ui->focus == FOCUS_SIDEBAR && input == 'i' && current_chat) {
 			ui->move_mult = 0;
 			ui->focus = FOCUS_CHAT;
 		}
@@ -97,25 +98,32 @@ void client_ui_run(client_ui_t *ui, client_t *client) {
 			ui->move_mult += input - '0';
 		}
 		/* input bar handling */
-		else if(ui->focus == FOCUS_INPUT
-		&& (input == KEY_ENTER || input == '\r' || input == '\n')) {
-			if(ui->input.len > 0) {
-				assert(strlen(ui->input.value));
+		else if(ui->focus == FOCUS_INPUT) {
+			if(input == KEY_ENTER || input == '\r' || input == '\n') {
+				if(ui->input.chars.size-1 > 0) {
+					assert(strlen(ui->input.chars.data));
 
-				if(ui->op == 'n')
-					client_send_name(client, ui->input.value);
-				else if(ui->op == 'u') {
-					if(client_current_chat(client))
-						client_upload_file(client, client_current_chat(client), ui->input.value);
-				} else if(ui->op == 'd') {
-					chat_row_t *row = vector_get(&ui->chat.chat->rows, ui->chat.chat->cursor);
-					if(row->type == CR_FILE)
-						client_download_file(client, &row->file, ui->input.value);
+					if(ui->op == 'n')
+						client_send_name(client, ui->input.chars.data);
+					else if(ui->op == 'u' && current_chat) {
+						client_upload_file(client, client_current_chat(client), ui->input.chars.data);
+					} else if(ui->op == 'd' && current_chat) {
+						chat_row_t *row = vector_get(&current_chat->rows, current_chat->cursor);
+						if(row->type == CR_FILE)
+							client_download_file(client, &row->file, ui->input.chars.data);
+					}
+					ui_input_clr(&ui->input);
+					ui->input.prompt = NULL;
 				}
+				ui->focus = FOCUS_SIDEBAR;
+			}
+			/* Escape cancels the operation */
+			else if(input == 27) {
 				ui_input_clr(&ui->input);
 				ui->input.prompt = NULL;
-			}
-			ui->focus = FOCUS_SIDEBAR;
+				ui->focus = FOCUS_SIDEBAR;
+			} else
+				client_ui_input_input(&ui->input, input);
 		}
 		/* Scroll the sidebar and chat window: focus-independant */
 		else if(input == KEY_DOWN)
@@ -123,9 +131,9 @@ void client_ui_run(client_ui_t *ui, client_t *client) {
 		else if(input == KEY_UP)
 			client_ui_sidebar_scroll(&ui->sidebar, -(ui->move_mult ?: 1));
 		else if(ui->focus != FOCUS_CHAT && input == 'j')
-			client_ui_chat_scroll(&ui->chat, (ui->move_mult ?: 1));
+			client_ui_chat_scroll(client, &ui->chat, (ui->move_mult ?: 1));
 		else if(ui->focus != FOCUS_CHAT && input == 'k')
-			client_ui_chat_scroll(&ui->chat, -(ui->move_mult ?: 1));
+			client_ui_chat_scroll(client, &ui->chat, -(ui->move_mult ?: 1));
 		/* Pass everything else along */
 		else switch(ui->focus) {
 			case FOCUS_CHAT:
@@ -134,8 +142,7 @@ void client_ui_run(client_ui_t *ui, client_t *client) {
 			case FOCUS_SIDEBAR:
 				client_ui_sidebar_input(&ui->sidebar, input);
 				break;
-			case FOCUS_INPUT:
-				client_ui_input_input(&ui->input, input);
+			default:
 				break;
 		}
 		ui->move_mult = 0;

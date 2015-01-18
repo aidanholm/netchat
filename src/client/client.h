@@ -36,7 +36,7 @@ int client_disconnect(client_t *client);
 int client_set_status(client_t *client, user_status_t status);
 int client_send_name(client_t *client, const char *name);
 int client_set_name(client_t *client, const char name[256]);
-chat_t *client_current_chat(client_t *client);
+chat_t *client_current_chat(const client_t *client);
 transfer_t *client_get_transfer(client_t *client, uint16_t transfer);
 
 #endif

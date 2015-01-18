@@ -166,7 +166,7 @@ int client_download_file(client_t *client, chat_file_t *file, const char *name) 
 	assert(name);
 	assert(strlen(name));
 
-	chat_t *chat = client->ui.chat.chat;
+	chat_t *chat = client_current_chat(client);
 	transfer_t *transfer = sp_vector_get(&client->transfers, file->id);
 	const char *err;
 
@@ -258,10 +258,11 @@ int client_set_name(client_t *client, const char name[256]) {
 	return 0;
 }
 
-chat_t *client_current_chat(client_t *client) {
+chat_t *client_current_chat(const client_t *client) {
 	assert(client);
 
-	return client->ui.chat.chat;
+	return client->ui.chat.chat_index != (unsigned) -1 ?
+		vector_get(&client->chats, client->ui.chat.chat_index) : NULL;
 }
 
 transfer_t *client_get_transfer(client_t *client, uint16_t id) {
