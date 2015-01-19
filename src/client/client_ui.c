@@ -79,8 +79,11 @@ void client_ui_run(client_ui_t *ui, client_t *client) {
 		if(input == ERR)
 			continue;
 
+		if((!current_chat || ui->focus == FOCUS_SIDEBAR) && input == 'q') {
+			return;
+		}
 		/* Switch focus keybindings (also resets mult_move) */
-		if(ui->focus == FOCUS_SIDEBAR && input == 'i' && current_chat) {
+		else if(ui->focus == FOCUS_SIDEBAR && input == 'i' && current_chat) {
 			ui->move_mult = 0;
 			ui->focus = FOCUS_CHAT;
 		}
@@ -96,6 +99,7 @@ void client_ui_run(client_ui_t *ui, client_t *client) {
 		{
 			ui->move_mult *= 10;
 			ui->move_mult += input - '0';
+			continue;
 		}
 		/* input bar handling */
 		else if(ui->focus == FOCUS_INPUT) {
@@ -126,8 +130,10 @@ void client_ui_run(client_ui_t *ui, client_t *client) {
 				client_ui_input_input(&ui->input, input);
 		}
 		/* Scroll the sidebar and chat window: focus-independant */
-		else if(input == KEY_DOWN)
+		else if(input == KEY_DOWN) {
+			debug("Mult-move: %u", ui->move_mult);
 			client_ui_sidebar_scroll(&ui->sidebar, (ui->move_mult ?: 1));
+		}
 		else if(input == KEY_UP)
 			client_ui_sidebar_scroll(&ui->sidebar, -(ui->move_mult ?: 1));
 		else if(ui->focus != FOCUS_CHAT && input == 'j')
