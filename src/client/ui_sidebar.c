@@ -71,6 +71,11 @@ void client_ui_chat_renderer(client_t *client, const void *c, WINDOW *win, int x
 	out[20] = 0;
 	mvwprintw(win, y, x, out);
 	mvwchgat(win, y, x+1, 1, 0, colour+selected, NULL);
+
+	if(chat->unread) {
+		mvwprintw(win, y, x+18, "!");
+		mvwchgat(win, y, x+18, 1, 0, COL_UNREAD+selected, NULL);
+	}
 }
 
 
@@ -249,6 +254,8 @@ void client_ui_sidebar_scroll(client_ui_sidebar_t *ui, int scroll) {
 	}
 
 	ui->client->ui.chat.chat_index = chat ? vector_indexof(&ui->client->chats, chat) : (unsigned)-1;
+	if(chat)
+		chat->unread = 0;
 
 	pthread_mutex_unlock(&ui->client->users_mutex);
 }

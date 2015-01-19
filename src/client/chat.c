@@ -27,6 +27,7 @@ int chat_add(client_t *client, uint16_t chat_id, uint16_t *client_ids, uint16_t 
 	chat.id = chat_id;
 	chat.top = chat.cursor = chat.morebelow = 0;
 	chat.max_namelen = 0;
+	chat.unread = 0;
 	vector_init(&chat.chars, sizeof(char));
 	vector_init(&chat.rows,  sizeof(chat_row_t));
 	vector_init(&chat.users, sizeof(uint16_t));
@@ -157,6 +158,7 @@ int chat_add_file(client_t *client, chat_t *chat, size_t index, uint16_t from_id
 
 	check_quiet(vector_add(&chat->rows, &new, 1));
 
+	chat->unread = chat != client_current_chat(client);
 	chat->max_namelen = max(chat->max_namelen, utf8_scrlen(chat_row_name(client, new)));
 
 	return chat->rows.size-1;

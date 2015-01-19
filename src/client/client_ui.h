@@ -35,6 +35,7 @@ typedef struct _client_ui_t {
 #define COL_INPUT_SEL 10
 #define COL_NAME COL_US_ONLINE
 #define COL_CURSOR COL_US_ONLINE
+#define COL_UNREAD COL_US_BUSY
 
 int client_ui_init(client_ui_t *ui, struct _client_t *client);
 void client_ui_free(client_ui_t *ui);

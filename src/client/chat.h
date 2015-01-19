@@ -37,6 +37,7 @@ typedef struct _chat_t {
 	uint16_t id;
 	uint16_t top, cursor, morebelow;
 	uint8_t max_namelen;
+	uint8_t unread;
 } chat_t;
 
 int chat_add(struct _client_t *client, uint16_t chat_id, uint16_t *client_ids, uint16_t num_ids);
