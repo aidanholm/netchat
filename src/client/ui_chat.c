@@ -109,6 +109,26 @@ void client_ui_chat_draw(client_t *client, client_ui_chat_t *ui) {
 		return;
 	}
 
+	/* Scroll the chat view in order to keep chat->cursor within the view */
+
+	if(chat->top > chat->cursor)
+		chat->top = chat->cursor;
+	else if(chat->top < chat->cursor) {
+		/* Count the number of lines from the top until we hit the first
+		 * not-fully-visible message */
+		int num_lines = 0;
+		for(unsigned int m=chat->top; m<chat->rows.size; m++) {
+			chat_row_t *row = vector_get(&chat->rows, m);
+			num_lines += row->type == CR_FILE ? 1 : row->msg.num_lines;
+			if(num_lines >= ui->h-1) {
+				/* Message m is not fully visible */
+				if(chat->cursor >= m)
+					chat->top++;
+				else
+					break;
+			}
+		}
+	}
 	/* Draw chat messages */
 
 	unsigned int y = 0;

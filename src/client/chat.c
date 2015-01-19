@@ -121,25 +121,13 @@ int chat_add_msg(client_t *client, chat_t *chat, const char *msg, uint16_t from_
 	new.msg.start = vector_indexof(&chat->chars, start);
 	check_quiet(vector_add(&chat->rows, &new, 1));
 
-#if 0
-	/* Disabled, can make cursor scroll out of sight */
-	if(chat->cursor == chat->rows.size - 2)
-		chat->cursor++;
-
-	int num_lines = 0;
-	for(int m=chat->cursor-1; m>=chat->top; m--) {
-		chat_row_t *row = vector_get(&chat->rows, m);
-		num_lines += row->type == CR_FILE ? 1 : row->msg.num_lines;
-
-		if(num_lines > client->ui.chat.h-1) {
-			chat->top = m+1;
-			break;
-		}
-	}
-	
-#endif
-
+	chat->unread = chat != client_current_chat(client);
 	chat->max_namelen = max(chat->max_namelen, utf8_scrlen(chat_row_name(client, new)));
+	/* Only auto-move the cursor if we're on the second-last element,
+	 * and if we're reading this chat */
+	if(chat->cursor == chat->rows.size - 2)
+	if(!chat->unread)
+		chat->cursor++;
 
 	return 0;
 error:
@@ -161,6 +149,11 @@ int chat_add_file(client_t *client, chat_t *chat, size_t index, uint16_t from_id
 	chat->unread = chat != client_current_chat(client);
 	chat->max_namelen = max(chat->max_namelen, utf8_scrlen(chat_row_name(client, new)));
 
+	/* Only auto-move the cursor if we're on the second-last element,
+	 * and if we're reading this chat */
+	if(chat->cursor == chat->rows.size - 2)
+	if(!chat->unread)
+		chat->cursor++;
 	return chat->rows.size-1;
 error:
 	return -1;
