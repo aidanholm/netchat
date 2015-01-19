@@ -153,14 +153,14 @@ int _msg_recv(int fd, const char *fmt, ...) {
 		else if(!strncmp(fmt, "%p", strlen("%p")))
 		{
 			char **arg = va_arg(ap, char **);
-			*arg = realloc(*arg, prev_arg);
+			*arg = realloc(*arg, prev_arg+1);
 			check_quiet(!read_block(fd, *arg, prev_arg));
 			fmt += strlen("%p");
 		}
 		else if(!strncmp(fmt, "%k", strlen("%k")))
 		{
 			uint16_t **arg = va_arg(ap, uint16_t **);
-			*arg = realloc(*arg, prev_arg*2);
+			*arg = realloc(*arg, prev_arg*2+1);
 			check_quiet(!read_block(fd, *arg, prev_arg*2));
 			for(unsigned int i=0; i<prev_arg; i++) {
 				uint16_t old = (*arg)[i];

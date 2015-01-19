@@ -67,7 +67,6 @@ int msg_handle_msg(server_t *server, client_t *client) {
 	check_quiet(!msg_recv(client->fd, MSG_msg, &chat_id, &unused, &len, &buf));
 	check_quiet(chatroom = sp_vector_get(&server->chatrooms, chat_id));
 	check_quiet(chatroom_client_is_present(server, chatroom, client));
-	assert(len < sizeof(buf)); /* FIXME */
 	buf[len] = 0;
 	client_recv_msg(server, chatroom, client, buf);
 
@@ -84,7 +83,6 @@ int msg_handle_send_file(server_t *server, client_t *client) {
 	uint32_t fsize;
 	check_quiet(!msg_recv(client->fd,
 				MSG_send_file, &chat_id, &fsize, &len, &buf, &unused, &unused));
-	assert(len < sizeof(buf)); /* FIXME */
 	buf[len] = 0;
 
 	log_info("Beginning to receive file '%s' from client <%s>: size %u",
