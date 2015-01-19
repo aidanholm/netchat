@@ -46,6 +46,7 @@ int client_init(client_t *client, const char *host, unsigned int port) {
 
 	return 0;
 error:
+	client_ui_free(&client->ui);
 	return 1;
 }
 
@@ -115,8 +116,6 @@ error:
 int client_disconnect(client_t *client) {
 	assert(client);
 	assert(client->socket >= 0);
-
-	client->running = 0;
 
 	/* Interrupt any ongoing read, then close the socket */
 	client->running = 0;

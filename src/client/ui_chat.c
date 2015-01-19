@@ -29,7 +29,6 @@ static void client_ui_chat_msg_draw(client_t *client, client_ui_chat_t *ui, unsi
 	assert(client);
 	assert(ui);
 	assert(ui->win);
-	assert(*y < ylim);
 
 	const chat_t *chat = client_current_chat(client);
 	const unsigned name_width = chat->max_namelen;
