@@ -62,6 +62,10 @@ error:
 	return 1;
 }
 
+void client_sigint_handler(__attribute__((unused)) int num) {
+	return;
+}
+
 void client_sigusr1_handler(__attribute__((unused)) int num) {
 	return;
 }
@@ -95,8 +99,10 @@ int client_connect(client_t *client, const char *hostname, unsigned int port) {
 			"Couldn't connect to '%s': %s", hostname, strerror(errno));
 
 	client->running = 1;
-	struct sigaction handler = {.sa_handler=client_sigusr1_handler};
-	sigaction(SIGUSR1, &handler, 0);
+	struct sigaction usr1handler = {.sa_handler=client_sigusr1_handler};
+	sigaction(SIGUSR1, &usr1handler, 0);
+	struct sigaction inthandler = {.sa_handler=client_sigint_handler};
+	sigaction(SIGINT, &inthandler, 0);
 
 	check(!pthread_create(&client->net_thread, NULL, client_net_thread, client),
 		"Couldn't create net thread: %s", strerror(errno));
