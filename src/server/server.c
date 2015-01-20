@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include <signal.h>
+#include <poll.h>
 
 #include "server.h"
 #include "client.h"
@@ -161,32 +162,33 @@ void server_loop(server_t *server) {
 
 	while(server->running) {
 		client_t *client;
-		int nfds = 0;
-		fd_set client_fds, err_fds;
+		unsigned i;
+		struct pollfd fds[server->clients.size];
 
-		FD_ZERO(&client_fds);
-		FD_ZERO(&err_fds);
+		/* We just build an array of pollfd structs on the stack for now;
+		 * TODO: keep this array in between iterations. This adds complications;
+		 * We cannot modify fds[] during a poll() call, so we have to interrupt
+		 * the call to poll, then rebuild the array. This would allow us to
+		 * remove the timeout to poll() however (see below)*/
+		i=0;
 		sp_vector_foreach(&server->clients, client) {
-			nfds = max(nfds, client->fd+1);
-			FD_SET(client->fd, &client_fds);
-			FD_SET(client->fd, &err_fds);
+			fds[i++] = (struct pollfd){.fd = client->fd, .events=POLLIN|POLLOUT};
 		}
 
-		struct timeval timeout = {.tv_sec = 0, .tv_usec = 200000};
-
-		/* FIXME: replace with poll */
-		if(select(nfds, &client_fds, NULL, &err_fds, &timeout) < 0) switch(errno) {
-			case EINTR:
-				continue;
-			default:
-				debug("Unhandled select error: %s", strerror(errno));
-				abort();
-		}
+		/* A timeout is necesary because a new client may connect after poll()
+		 * is called; without a timeout the client would be ignored until after
+		 * another message was sent/received, and poll() was called again.
+		 * The alternative is interrupting poll() with a system call whenever
+		 * a client is added or removed, before rebuilding the pollfd table */
+		check_warn(poll(fds, sizeof(fds)/sizeof(*fds), 100) >= 0,
+				"Error polling sockets: %s", strerror(errno));
 
 		pthread_mutex_lock(&server->clients_mutex);
 
+		i=0;
 		sp_vector_foreach(&server->clients, client) {
-			if(FD_ISSET(client->fd, &client_fds)) {
+			assert(fds[i].fd == client->fd);
+			if(fds[i].revents & POLLIN) {
 				uint8_t type;
 				int r = read(client->fd, &type, 1);
 
@@ -197,8 +199,10 @@ void server_loop(server_t *server) {
 				} else if(r > 0) {
 					msg_handle(msg_get_type(type), server, client);
 				}
+			} else if(fds[i].revents & POLLOUT) {
+				client_send_file_part(client);
 			}
-			client_send_file_part(client);
+			i++;
 		}
 
 		pthread_mutex_unlock(&server->clients_mutex);
