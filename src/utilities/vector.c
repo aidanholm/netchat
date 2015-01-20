@@ -83,12 +83,9 @@ inline int vector_set(vector_t *v, size_t index, const void *data, size_t num) {
 	assert(v);
 	assert(data);
 	assert(num > 0);
+	assert(v->_alloc_size > 0);
 
 	size_t required_size = index + num;
-
-	/* FIXME: Initialize the vector if it isn't already initialized */
-	if(v->_alloc_size == 0)
-		vector_init_alloc(v, v->item_size, required_size);
 
 	/* If there's not enough space to fit the new elements, expand */
 	if(index+num > v->_alloc_size) {
