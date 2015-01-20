@@ -99,10 +99,6 @@ void server_free(server_t *server) {
 
 	pthread_mutex_lock(&server->clients_mutex);
 
-	/* FIXME */
-	/*sp_vector_foreach(&server->chatrooms, chatroom)*/
-		/*chatroom_send_msg(server, chatroom, NULL, "Server shutting down...\n");*/
-
 	sp_vector_foreach(&server->clients, client)
 		client_disconnect(server, client);
 
