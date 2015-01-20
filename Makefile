@@ -59,7 +59,7 @@ COL_RST     =\\x1b[0m
 MSG_COMP =$(COL_GREEN)"Compiling" $(COL_RST)
 MSG_LINK =$(COL_BLUE)"Linking  " $(COL_RST)
 
-all: server client tags
+all: chat_server chat_client tags
 
 # Build object file from source file
 $(ODIR)/%.o: $(SDIR)/%.c Makefile
@@ -82,11 +82,11 @@ comma:= ,
 empty:=
 space:= $(empty) $(empty)
 
-server: $(call OBJS,$(SERVER_SRCS))
+chat_server: $(call OBJS,$(SERVER_SRCS))
 	@echo -e $(MSG_LINK) "$@"
 	@ccache $(CC) -o $@ $^ $(CFLAGS) -Wl,$(subst $(space),$(comma),$(LDFLAGS)) $(LIBS)
 
-client: $(call OBJS,$(CLIENT_SRCS))
+chat_client: $(call OBJS,$(CLIENT_SRCS))
 	@echo -e $(MSG_LINK) "$@"
 	@ccache $(CC) -o $@ $^ $(CFLAGS) -Wl,$(subst $(space),$(comma),$(LDFLAGS)) $(LIBS)
 
