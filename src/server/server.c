@@ -183,7 +183,6 @@ void server_loop(server_t *server) {
 
 		i=0;
 		sp_vector_foreach(&server->clients, client) {
-			assert(fds[i].fd == client->fd);
 			if(fds[i].revents & POLLIN) {
 				uint8_t type;
 				int r = read(client->fd, &type, 1);
